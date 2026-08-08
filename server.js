@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const fsSync = require("fs");
 const fs = require("fs/promises");
 const path = require("path");
 const { MongoClient, ObjectId } = require("mongodb");
@@ -9,7 +10,8 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 const isVercel = Boolean(process.env.VERCEL);
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/jobayer-gk";
-const dataDir = path.join(__dirname, "data");
+const projectRoot = fsSync.existsSync(path.join(__dirname, "index.html")) ? __dirname : process.cwd();
+const dataDir = path.join(projectRoot, "data");
 const dataFile = path.join(dataDir, "chapters.json");
 
 let db;
@@ -21,7 +23,7 @@ let connectPromise = null;
 let retryTimer = null;
 
 app.use(express.json({ limit: "5mb" }));
-app.use(express.static(__dirname));
+app.use(express.static(projectRoot));
 
 function normalizeText(value) {
   return String(value ?? "").trim();
@@ -70,17 +72,93 @@ function normalizeQuestions(input, options = {}) {
   });
 }
 
+function ensureChapterPages(chapter) {
+  if (Array.isArray(chapter?.pages) && chapter.pages.length > 0) {
+    return chapter.pages.map((page, index) => ({
+      id: page.id || `page-${page.pageNo || index + 1}`,
+      pageNo: Number(page.pageNo) || index + 1,
+      title: normalizeText(page.title) || `Page ${Number(page.pageNo) || index + 1}`,
+      questions: Array.isArray(page.questions) ? page.questions : [],
+    }));
+  }
+
+  const legacyQuestions = Array.isArray(chapter?.questions) ? chapter.questions : [];
+
+  if (legacyQuestions.length > 0) {
+    return [{
+      id: "page-1",
+      pageNo: 1,
+      title: "Page 1",
+      questions: legacyQuestions,
+    }];
+  }
+
+  return [];
+}
+
 function getChapterQuestions(chapter) {
-  return Array.isArray(chapter?.questions) ? chapter.questions : [];
+  return ensureChapterPages(chapter).flatMap((page) => page.questions);
+}
+
+function normalizePagesFromBody(body) {
+  if (Array.isArray(body.pages)) {
+    return body.pages.map((page, index) => {
+      const pageNo = Number(page.pageNo) || index + 1;
+
+      return {
+        id: normalizeText(page.id) || `page-${pageNo}`,
+        pageNo,
+        title: normalizeText(page.title) || `Page ${pageNo}`,
+        questions: normalizeQuestions(page.questions, { allowEmpty: true }),
+      };
+    });
+  }
+
+  if (body.questions !== undefined) {
+    const questions = normalizeQuestions(body.questions, { allowEmpty: true });
+
+    if (!questions.length) {
+      return [];
+    }
+
+    return [{
+      id: "page-1",
+      pageNo: 1,
+      title: "Page 1",
+      questions,
+    }];
+  }
+
+  return undefined;
 }
 
 function chapterSummary(chapter) {
+  const pages = ensureChapterPages(chapter);
+  const questionCount = pages.reduce((sum, page) => sum + page.questions.length, 0);
+
   return {
     id: chapter._id.toString(),
     title: chapter.title,
-    questionCount: getChapterQuestions(chapter).length,
+    questionCount,
+    pageCount: pages.length,
+    pages: pages.map((page) => ({
+      id: page.id,
+      pageNo: page.pageNo,
+      title: page.title,
+      questionCount: page.questions.length,
+    })),
     createdAt: chapter.createdAt,
     updatedAt: chapter.updatedAt,
+  };
+}
+
+function serializeChapter(chapter) {
+  const pages = ensureChapterPages(chapter);
+
+  return {
+    ...chapterSummary(chapter),
+    pages,
+    questions: getChapterQuestions(chapter),
   };
 }
 
@@ -151,15 +229,16 @@ async function findChapterById(id) {
   return docs.find((doc) => doc._id === id) || null;
 }
 
-async function createChapter(title, questionItems) {
+async function createChapter(title, pageItems) {
   const now = new Date().toISOString();
+  const pages = pageItems || [];
 
   if (storageMode === "mongodb") {
     const chapterCount = await chapters.countDocuments();
     const result = await chapters.insertOne({
       title,
       chapterNo: chapterCount + 1,
-      questions: questionItems,
+      pages,
       createdAt: now,
       updatedAt: now,
     });
@@ -172,7 +251,7 @@ async function createChapter(title, questionItems) {
     _id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title,
     chapterNo: docs.length + 1,
-    questions: questionItems,
+    pages,
     createdAt: now,
     updatedAt: now,
   };
@@ -182,18 +261,24 @@ async function createChapter(title, questionItems) {
   return chapter;
 }
 
-async function updateChapter(id, title, questionItems) {
+async function updateChapter(id, title, pageItems) {
   const now = new Date().toISOString();
 
   if (storageMode === "mongodb") {
     const _id = parseObjectId(id);
     const update = { title, updatedAt: now };
 
-    if (questionItems !== undefined) {
-      update.questions = questionItems;
+    if (pageItems !== undefined) {
+      update.pages = pageItems;
     }
 
-    return chapters.findOneAndUpdate({ _id }, { $set: update }, { returnDocument: "after" });
+    const updateOps = { $set: update };
+
+    if (pageItems !== undefined) {
+      updateOps.$unset = { questions: "" };
+    }
+
+    return chapters.findOneAndUpdate({ _id }, updateOps, { returnDocument: "after" });
   }
 
   const docs = await readFileChapters();
@@ -203,13 +288,18 @@ async function updateChapter(id, title, questionItems) {
     return null;
   }
 
-  docs[index] = {
+  const nextChapter = {
     ...docs[index],
     title,
     updatedAt: now,
-    ...(questionItems !== undefined ? { questions: questionItems } : {}),
   };
 
+  if (pageItems !== undefined) {
+    nextChapter.pages = pageItems;
+    delete nextChapter.questions;
+  }
+
+  docs[index] = nextChapter;
   await writeFileChapters(docs);
   return docs[index];
 }
@@ -231,6 +321,10 @@ async function ensureStorageReady() {
     await activateFileStorage(databaseError);
   }
 }
+
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(projectRoot, "index.html"));
+});
 
 app.get("/api/health", async (_req, res) => {
   await ensureStorageReady().catch(() => {});
@@ -259,12 +353,7 @@ app.get("/api/chapters/:id", requireDatabase, async (req, res, next) => {
       return res.status(404).json({ error: "Chapter পাওয়া যায়নি।" });
     }
 
-    res.json({
-      chapter: {
-        ...chapterSummary(chapter),
-        questions: getChapterQuestions(chapter),
-      },
-    });
+    res.json({ chapter: serializeChapter(chapter) });
   } catch (error) {
     next(error);
   }
@@ -273,20 +362,15 @@ app.get("/api/chapters/:id", requireDatabase, async (req, res, next) => {
 app.post("/api/chapters", requireDatabase, async (req, res, next) => {
   try {
     const title = normalizeText(req.body.title);
-    const questionItems = normalizeQuestions(req.body.questions, { allowEmpty: true });
+    const pageItems = normalizePagesFromBody(req.body) ?? [];
 
     if (!title) {
       return res.status(400).json({ error: "Chapter title দরকার।" });
     }
 
-    const chapter = await createChapter(title, questionItems);
+    const chapter = await createChapter(title, pageItems);
 
-    res.status(201).json({
-      chapter: {
-        ...chapterSummary(chapter),
-        questions: getChapterQuestions(chapter),
-      },
-    });
+    res.status(201).json({ chapter: serializeChapter(chapter) });
   } catch (error) {
     next(error);
   }
@@ -300,24 +384,15 @@ app.put("/api/chapters/:id", requireDatabase, async (req, res, next) => {
       return res.status(400).json({ error: "Chapter title দরকার।" });
     }
 
-    let questionItems;
+    const pageItems = normalizePagesFromBody(req.body);
 
-    if (req.body.questions !== undefined) {
-      questionItems = normalizeQuestions(req.body.questions, { allowEmpty: true });
-    }
-
-    const result = await updateChapter(req.params.id, title, questionItems);
+    const result = await updateChapter(req.params.id, title, pageItems);
 
     if (!result) {
       return res.status(404).json({ error: "Chapter পাওয়া যায়নি।" });
     }
 
-    res.json({
-      chapter: {
-        ...chapterSummary(result),
-        questions: getChapterQuestions(result),
-      },
-    });
+    res.json({ chapter: serializeChapter(result) });
   } catch (error) {
     next(error);
   }

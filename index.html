@@ -44,10 +44,17 @@
           </div>
 
           <div class="control-row">
-            <label class="field-label sr-only" for="chapterSelect">Chapter</label>
-            <select id="chapterSelect" class="select-input">
-              <option value="">Chapter বেছে নিন</option>
-            </select>
+            <div class="chapter-controls">
+              <label class="field-label sr-only" for="chapterSelect">Chapter</label>
+              <select id="chapterSelect" class="select-input">
+                <option value="">Chapter বেছে নিন</option>
+              </select>
+
+              <label class="field-label sr-only" for="pageSelect">Page</label>
+              <select id="pageSelect" class="select-input hidden" aria-label="Page select">
+                <option value="all">Page</option>
+              </select>
+            </div>
 
             <div class="segmented" aria-label="Mode">
               <button class="segment active" type="button" data-mode="practice">Practice</button>
@@ -134,6 +141,11 @@
             ></textarea>
 
             <div id="jsonStatus" class="json-status" role="status">Chapter title লিখে save করুন।</div>
+
+            <div id="pageManageSection" class="page-manage-section hidden">
+              <label class="field-label">Saved Pages</label>
+              <div id="pageManageList" class="page-manage-list"></div>
+            </div>
 
             <div class="action-grid">
               <button id="saveChapterBtn" class="primary-btn" type="button">Create Chapter</button>

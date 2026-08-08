@@ -221,6 +221,16 @@ button {
   align-items: center;
 }
 
+.chapter-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  gap: 8px;
+}
+
+.exam-scope-toggle {
+  width: 100%;
+}
+
 .select-input,
 .text-input,
 textarea {
@@ -859,6 +869,71 @@ body[data-mode="exam"] .primary-btn {
   gap: 8px;
 }
 
+.page-manage-section {
+  display: grid;
+  gap: 8px;
+}
+
+.page-manage-list {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.page-manage-empty {
+  margin: 0;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.page-manage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--option-bg);
+  padding: 10px 12px;
+}
+
+.page-manage-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.page-manage-info strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.page-manage-info span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.page-delete-btn {
+  flex-shrink: 0;
+  border: 1px solid #ffc6bf;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.page-delete-btn:hover {
+  filter: brightness(0.97);
+}
+
 /* Desktop */
 @media (min-width: 768px) {
   .app-shell {
@@ -887,6 +962,10 @@ body[data-mode="exam"] .primary-btn {
 
 @media (max-width: 640px) {
   .control-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chapter-controls {
     grid-template-columns: 1fr;
   }
 
