@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#116b5f" />
+    <title>Jobayer GK MCQ</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-view="quiz">
+    <div id="loadingScreen" class="loading-screen" aria-live="polite">
+      <div class="loading-card">
+        <div class="loading-spinner" aria-hidden="true"></div>
+        <p>লোড হচ্ছে...</p>
+      </div>
+    </div>
+
+    <main class="app-shell">
+      <!-- Student Quiz View -->
+      <section id="quizView" class="view view-quiz">
+        <header class="quiz-header">
+          <div class="header-top">
+            <div class="brand">
+              <p class="eyebrow">Jobayer GK</p>
+              <h1>MCQ Practice</h1>
+            </div>
+            <div class="header-actions">
+              <button id="themeToggleBtn" class="ghost-btn icon-only" type="button" title="Theme toggle" aria-label="Theme toggle">
+                <svg class="theme-icon theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                <svg class="theme-icon theme-icon-dark hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button id="openAdminBtn" class="ghost-btn icon-only" type="button" title="Chapter manage" aria-label="Chapter manage">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2.1 2.1 0 1 1-2.97 2.97l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .33 1.7 1.7 0 0 0-.75 1.4V21a2.1 2.1 0 1 1-4.2 0v-.07a1.7 1.7 0 0 0-.75-1.4 1.7 1.7 0 0 0-1-.33 1.7 1.7 0 0 0-1.87.34l-.06.06a2.1 2.1 0 1 1-2.97-2.97l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.33-1 1.7 1.7 0 0 0-1.4-.75H2.1a2.1 2.1 0 1 1 0-4.2h.07a1.7 1.7 0 0 0 1.4-.75 1.7 1.7 0 0 0 .33-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2.1 2.1 0 1 1 2.97-2.97l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.33 1.7 1.7 0 0 0 .75-1.4V2.1a2.1 2.1 0 1 1 4.2 0v.07a1.7 1.7 0 0 0 .75 1.4 1.7 1.7 0 0 0 1 .33 1.7 1.7 0 0 0 1.87-.34l.06-.06a2.1 2.1 0 1 1 2.97 2.97l-.06.06A1.7 1.7 0 0 0 19.4 9c.13.35.2.72.2 1.1s-.07.75-.2 1.1Z" stroke="currentColor" stroke-width="1.8"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <label class="field-label sr-only" for="chapterSelect">Chapter</label>
+            <select id="chapterSelect" class="select-input">
+              <option value="">Chapter বেছে নিন</option>
+            </select>
+
+            <div class="segmented" aria-label="Mode">
+              <button class="segment active" type="button" data-mode="practice">Practice</button>
+              <button class="segment" type="button" data-mode="exam">Exam</button>
+            </div>
+          </div>
+
+          <div class="score-strip" aria-label="Score summary">
+            <div class="score-item">
+              <strong id="totalCount" class="score-value">0</strong>
+              <span id="totalLabel" class="score-label">মোট</span>
+            </div>
+            <div class="score-item">
+              <strong id="answeredCount" class="score-value">0</strong>
+              <span id="answeredLabel" class="score-label">উত্তর</span>
+            </div>
+            <div class="score-item">
+              <strong id="liveScore" class="score-value">0</strong>
+              <span class="score-label">স্কোর</span>
+            </div>
+          </div>
+        </header>
+
+        <section id="resultPanel" class="result-panel hidden" aria-live="polite"></section>
+
+        <section id="questionList" class="question-list">
+          <div class="empty-state">
+            <div class="empty-icon" aria-hidden="true">📚</div>
+            <h2>Chapter বেছে নিন</h2>
+            <p>উপরে থেকে chapter select করলেই MCQ শুরু হবে।</p>
+          </div>
+        </section>
+
+        <footer id="quizFooter" class="quiz-footer hidden">
+          <div class="footer-actions">
+            <button id="resetBtn" class="secondary-btn" type="button">Reset</button>
+            <button id="submitBtn" class="primary-btn" type="button">Submit Exam</button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- Admin Manage View -->
+      <section id="adminView" class="view view-admin hidden">
+        <header class="admin-header">
+          <button id="backToQuizBtn" class="ghost-btn" type="button" aria-label="Quiz-এ ফিরুন">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Quiz-এ ফিরুন
+          </button>
+          <div>
+            <p class="eyebrow">Admin</p>
+            <h1>Chapter Manage</h1>
+          </div>
+          <div id="storageBadge" class="storage-badge">Loading...</div>
+        </header>
+
+        <div class="admin-grid">
+          <section class="admin-card">
+            <div class="section-head">
+              <h2>Saved Chapters</h2>
+              <button id="addChapterBtn" class="icon-btn" type="button" title="নতুন chapter">+</button>
+            </div>
+            <div id="chapterCount" class="chapter-count">0 chapters</div>
+            <div id="chapterList" class="chapter-list"></div>
+          </section>
+
+          <section class="admin-card editor-card">
+            <label class="field-label" for="chapterTitle">Chapter শিরোনাম</label>
+            <input id="chapterTitle" class="text-input" type="text" placeholder="Chapter title" />
+
+            <label class="field-label" for="jsonInput">Question JSON</label>
+            <textarea
+              id="jsonInput"
+              spellcheck="false"
+              placeholder='[
+  {
+    "id": 1,
+    "question": "প্রশ্ন",
+    "options": ["ক", "খ", "গ", "ঘ"],
+    "answer": "ক"
+  }
+]'
+            ></textarea>
+
+            <div id="jsonStatus" class="json-status" role="status">Chapter title লিখে save করুন।</div>
+
+            <div class="action-grid">
+              <button id="saveChapterBtn" class="primary-btn" type="button">Create Chapter</button>
+              <button id="clearDraftBtn" class="secondary-btn" type="button">Clear</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
