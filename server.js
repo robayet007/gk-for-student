@@ -7,6 +7,7 @@ const { MongoClient, ObjectId } = require("mongodb");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const isVercel = Boolean(process.env.VERCEL);
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/jobayer-gk";
 const dataDir = path.join(__dirname, "data");
 const dataFile = path.join(dataDir, "chapters.json");
@@ -16,6 +17,8 @@ let chapters;
 let mongoClient;
 let databaseError = null;
 let storageMode = null;
+let connectPromise = null;
+let retryTimer = null;
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.static(__dirname));
@@ -91,14 +94,20 @@ function parseObjectId(id) {
   return new ObjectId(id);
 }
 
-function requireDatabase(_req, res, next) {
-  if (!storageMode) {
-    return res.status(503).json({
-      error: databaseError || "Database এখনও ready হয়নি।",
-    });
-  }
+async function requireDatabase(_req, res, next) {
+  try {
+    await ensureStorageReady();
 
-  next();
+    if (!storageMode) {
+      return res.status(503).json({
+        error: databaseError || "Database এখনও ready হয়নি।",
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function ensureDataDir() {
@@ -205,7 +214,26 @@ async function updateChapter(id, title, questionItems) {
   return docs[index];
 }
 
-app.get("/api/health", (_req, res) => {
+async function ensureStorageReady() {
+  if (storageMode) {
+    return;
+  }
+
+  if (!connectPromise) {
+    connectPromise = connectDatabase().finally(() => {
+      connectPromise = null;
+    });
+  }
+
+  await connectPromise;
+
+  if (!storageMode && !isVercel) {
+    await activateFileStorage(databaseError);
+  }
+}
+
+app.get("/api/health", async (_req, res) => {
+  await ensureStorageReady().catch(() => {});
   res.status(storageMode ? 200 : 503).json({
     ok: Boolean(storageMode),
     storage: storageMode,
@@ -301,6 +329,12 @@ app.use((error, _req, res, _next) => {
 });
 
 async function activateFileStorage(reason) {
+  if (isVercel) {
+    storageMode = null;
+    databaseError = reason || "MongoDB connection required in Vercel.";
+    return;
+  }
+
   storageMode = "file";
   databaseError = reason || null;
   await ensureDataDir();
@@ -316,6 +350,10 @@ async function activateFileStorage(reason) {
 
 async function connectDatabase() {
   try {
+    if (storageMode === "mongodb" && chapters) {
+      return;
+    }
+
     if (mongoClient) {
       await mongoClient.close().catch(() => {});
     }
@@ -336,29 +374,44 @@ async function connectDatabase() {
     console.log(`MongoDB connected: ${db.databaseName}`);
   } catch (error) {
     databaseError = error.message;
+    storageMode = null;
     console.error("MongoDB connection failed:", error.message);
-
-    if (storageMode !== "file") {
-      await activateFileStorage(error.message);
-    }
   }
 }
 
 function scheduleDatabaseRetry() {
-  setInterval(() => {
+  if (isVercel || retryTimer) {
+    return;
+  }
+
+  retryTimer = setInterval(() => {
     if (storageMode !== "mongodb") {
-      connectDatabase();
+      ensureStorageReady().catch(() => {});
     }
   }, 30000);
 }
 
-app.listen(port, async () => {
-  console.log(`Jobayer GK MCQ app running at http://localhost:${port}`);
-  await connectDatabase();
+async function initializeApplication() {
+  await ensureStorageReady();
 
-  if (!storageMode) {
+  if (!storageMode && !isVercel) {
     await activateFileStorage(databaseError);
   }
 
   scheduleDatabaseRetry();
-});
+}
+
+async function startLocalServer() {
+  console.log(`Jobayer GK MCQ app running at http://localhost:${port}`);
+  await initializeApplication();
+  app.listen(port);
+}
+
+if (require.main === module) {
+  startLocalServer().catch((error) => {
+    console.error("App initialization failed:", error.message);
+    process.exit(1);
+  });
+}
+
+module.exports = app;
