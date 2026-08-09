@@ -13,6 +13,9 @@ const jsonInput = document.querySelector("#jsonInput");
 const jsonStatus = document.querySelector("#jsonStatus");
 const questionList = document.querySelector("#questionList");
 const resultPanel = document.querySelector("#resultPanel");
+const examResultModal = document.querySelector("#examResultModal");
+const examResultContent = document.querySelector("#examResultContent");
+const closeExamResultBtn = document.querySelector("#closeExamResultBtn");
 const totalCount = document.querySelector("#totalCount");
 const answeredCount = document.querySelector("#answeredCount");
 const liveScore = document.querySelector("#liveScore");
@@ -51,6 +54,7 @@ let practicePageFilter = "all";
 let questions = [];
 let selectedAnswers = new Map();
 let submitted = false;
+let examResultDismissed = false;
 let mode = "practice";
 let examPhase = null;
 let examNegativeMark = true;
@@ -436,6 +440,8 @@ function resetExamState() {
   questions = [];
   selectedAnswers.clear();
   submitted = false;
+  examResultDismissed = false;
+  closeExamResultModal(false);
 }
 
 function beginExamSetup() {
@@ -927,6 +933,8 @@ function startExam() {
   examPhase = "running";
   selectedAnswers.clear();
   submitted = false;
+  examResultDismissed = false;
+  closeExamResultModal(false);
   renderQuiz();
 }
 
@@ -977,13 +985,83 @@ function submitExam() {
   }
 
   submitted = true;
+  examResultDismissed = false;
   renderQuiz();
-  resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  openExamResultModal(calculateScore(true));
+}
+
+function examResultTier(score) {
+  const percent = score.total ? (score.correct / score.total) * 100 : 0;
+
+  if (percent >= 80) {
+    return { id: "excellent", icon: "🏆", label: "অসাধারণ!", note: "দারুণ পারফরম্যান্স!" };
+  }
+
+  if (percent >= 50) {
+    return { id: "good", icon: "⭐", label: "ভালো করেছেন!", note: "আরও একটু practice করলে perfect হবে।" };
+  }
+
+  return { id: "retry", icon: "📘", label: "আরও চেষ্টা করুন", note: "উত্তর review করে আবার exam দিন।" };
+}
+
+function openExamResultModal(score) {
+  if (!examResultModal || !examResultContent) {
+    return;
+  }
+
+  const tier = examResultTier(score);
+  const percent = score.total ? Math.round((score.correct / score.total) * 100) : 0;
+
+  examResultContent.innerHTML = `
+    <div class="exam-result-hero ${tier.id}">
+      <div class="exam-result-badge" aria-hidden="true">${tier.icon}</div>
+      <p class="eyebrow">Exam Result</p>
+      <h2 id="examResultTitle">${escapeHtml(tier.label)}</h2>
+      <p class="exam-result-note">${escapeHtml(tier.note)}</p>
+      <div class="exam-result-score-ring">
+        <strong>${score.score}</strong>
+        <span>Score</span>
+      </div>
+      <div class="exam-result-percent">${percent}% সঠিক</div>
+    </div>
+    <div class="exam-result-grid">
+      ${metric("মোট", score.total)}
+      ${metric("সঠিক", score.correct)}
+      ${metric("ভুল", score.wrong)}
+      ${metric("Skipped", score.skipped)}
+    </div>
+    ${score.negativeApplied ? `<p class="exam-result-footnote">Negative marking (-0.25) প্রয়োগ করা হয়েছে।</p>` : ""}
+    <p class="exam-result-hint">✕ চাপলে প্রশ্নের সঠিক/ভুল উত্তর দেখতে পারবেন।</p>
+  `;
+
+  examResultModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+  closeExamResultBtn?.focus();
+}
+
+function closeExamResultModal(shouldRender = true) {
+  if (!examResultModal) {
+    return;
+  }
+
+  examResultModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+
+  if (submitted && mode === "exam" && examPhase === "running") {
+    examResultDismissed = true;
+
+    if (shouldRender) {
+      renderQuiz();
+      questionList?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
 }
 
 function resetState() {
   selectedAnswers.clear();
   submitted = false;
+  examResultDismissed = false;
+  closeExamResultModal(false);
   renderQuiz();
 }
 
@@ -1089,7 +1167,7 @@ function renderChapters() {
 }
 
 function renderResult(score) {
-  const showResult = score && questions.length && (mode === "practice" || submitted);
+  const showResult = score && questions.length && mode === "practice";
 
   resultPanel.classList.toggle("hidden", !showResult);
 
@@ -1303,7 +1381,7 @@ function renderQuestions() {
 
 function renderQuestion(question, index) {
   const selected = selectedAnswers.get(question.uid);
-  const canReveal = mode === "practice" ? Boolean(selected) : submitted;
+  const canReveal = mode === "practice" ? Boolean(selected) : (submitted && examResultDismissed);
   const isCorrect = selected === question.answer;
   const feedback = canReveal ? renderFeedback(question, selected, isCorrect) : "";
 
@@ -1363,7 +1441,7 @@ function renderFeedback(question, selected, isCorrect) {
 
   const label = isCorrect ? "সঠিক" : "ভুল";
   const className = isCorrect ? "correct" : "wrong";
-  const showExplanation = mode === "exam" && submitted && question.explanation;
+  const showExplanation = mode === "exam" && submitted && examResultDismissed && question.explanation;
 
   return `
     <div class="feedback ${className}">
@@ -1415,6 +1493,7 @@ saveChapterBtn.addEventListener("click", saveChapter);
 clearDraftBtn.addEventListener("click", () => createChapterDraft(true));
 resetBtn.addEventListener("click", resetState);
 submitBtn.addEventListener("click", submitExam);
+closeExamResultBtn?.addEventListener("click", () => closeExamResultModal(true));
 openAdminBtn.addEventListener("click", () => setView("admin"));
 backToQuizBtn.addEventListener("click", () => setView("quiz"));
 backToSubjectsBtn.addEventListener("click", goToSubjects);
