@@ -4,24 +4,63 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#116b5f" />
-    <title>Jobayer GK MCQ</title>
+    <meta name="description" content="বাংলা, English ও GK subject-wise MCQ practice ও exam app" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Jobayer MCQ" />
+    <title>Jobayer MCQ Practice</title>
+    <link rel="icon" href="/icons/logo-source.jpg" type="image/jpeg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.jpg" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body data-view="quiz">
+  <body data-view="subject">
     <div id="loadingScreen" class="loading-screen" aria-live="polite">
       <div class="loading-card">
+        <img class="loading-logo" src="/icons/logo-source.jpg" alt="" width="72" height="72" />
         <div class="loading-spinner" aria-hidden="true"></div>
         <p>লোড হচ্ছে...</p>
       </div>
     </div>
 
     <main class="app-shell">
+      <!-- Subject Selection View -->
+      <section id="subjectView" class="view view-subject">
+        <header class="subject-header">
+          <div class="subject-brand">
+            <img class="app-logo" src="/icons/logo-source.jpg" alt="Jobayer MCQ logo" width="88" height="88" />
+            <p class="eyebrow">Jobayer MCQ</p>
+            <h1>কোন subject-এ পড়বেন?</h1>
+            <p class="subject-intro">Subject বেছে নিন, তারপর chapter-wise practice বা exam দিন।</p>
+          </div>
+          <div class="header-actions subject-header-actions">
+            <button id="themeToggleBtnSubject" class="ghost-btn icon-only" type="button" title="Theme toggle" aria-label="Theme toggle">
+              <svg class="theme-icon theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              <svg class="theme-icon theme-icon-dark hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <div id="subjectGrid" class="subject-grid" aria-label="Subject list"></div>
+      </section>
+
       <!-- Student Quiz View -->
-      <section id="quizView" class="view view-quiz">
+      <section id="quizView" class="view view-quiz hidden">
         <header class="quiz-header">
           <div class="header-top">
             <div class="brand">
-              <p class="eyebrow">Jobayer GK</p>
+              <button id="backToSubjectsBtn" class="ghost-btn subject-back-btn" type="button" aria-label="Subject বদলান">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span id="currentSubjectLabel">Subject</span>
+              </button>
+              <p class="eyebrow">Jobayer MCQ</p>
               <h1>MCQ Practice</h1>
             </div>
             <div class="header-actions">
@@ -106,7 +145,7 @@
             Quiz-এ ফিরুন
           </button>
           <div>
-            <p class="eyebrow">Admin</p>
+            <p class="eyebrow">Admin · <span id="adminSubjectLabel">Subject</span></p>
             <h1>Chapter Manage</h1>
           </div>
           <div id="storageBadge" class="storage-badge">Loading...</div>

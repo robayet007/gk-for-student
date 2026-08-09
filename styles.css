@@ -160,6 +160,121 @@ button {
   text-transform: uppercase;
 }
 
+/* Subject Selection View */
+.view-subject {
+  overflow: hidden;
+}
+
+.subject-header {
+  display: grid;
+  gap: 12px;
+  padding: 24px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--panel) 100%);
+}
+
+.subject-header-actions {
+  justify-self: end;
+}
+
+.subject-brand {
+  text-align: center;
+}
+
+.app-logo,
+.loading-logo {
+  display: block;
+  margin: 0 auto 12px;
+  border-radius: 18px;
+  border: 3px solid var(--panel);
+  box-shadow: var(--shadow);
+  object-fit: cover;
+}
+
+.loading-logo {
+  margin-bottom: 8px;
+}
+
+.subject-brand h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.subject-intro {
+  max-width: 420px;
+  margin: 8px auto 0;
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.subject-grid {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.subject-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--option-bg);
+  color: var(--text);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.subject-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.subject-card-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--panel-soft);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.subject-card-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subject-card-body strong {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.subject-card-body span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.subject-card-meta {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.subject-back-btn {
+  margin-bottom: 8px;
+}
+
 /* Quiz View */
 .quiz-header {
   position: sticky;
@@ -939,6 +1054,15 @@ body[data-mode="exam"] .primary-btn {
   .app-shell {
     width: min(1100px, 100%);
     padding: 20px;
+  }
+
+  .subject-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 20px;
+  }
+
+  .subject-brand h1 {
+    font-size: 28px;
   }
 
   .admin-grid {

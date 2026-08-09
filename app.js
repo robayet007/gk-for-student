@@ -1,6 +1,11 @@
 const loadingScreen = document.querySelector("#loadingScreen");
+const subjectView = document.querySelector("#subjectView");
 const quizView = document.querySelector("#quizView");
 const adminView = document.querySelector("#adminView");
+const subjectGrid = document.querySelector("#subjectGrid");
+const currentSubjectLabel = document.querySelector("#currentSubjectLabel");
+const adminSubjectLabel = document.querySelector("#adminSubjectLabel");
+const backToSubjectsBtn = document.querySelector("#backToSubjectsBtn");
 const chapterSelect = document.querySelector("#chapterSelect");
 const pageSelect = document.querySelector("#pageSelect");
 const chapterTitle = document.querySelector("#chapterTitle");
@@ -27,11 +32,16 @@ const quizFooter = document.querySelector("#quizFooter");
 const openAdminBtn = document.querySelector("#openAdminBtn");
 const backToQuizBtn = document.querySelector("#backToQuizBtn");
 const themeToggleBtn = document.querySelector("#themeToggleBtn");
+const themeToggleBtnSubject = document.querySelector("#themeToggleBtnSubject");
 const modeButtons = document.querySelectorAll("[data-mode]");
 const controlRow = document.querySelector(".control-row");
 
 const optionLetters = ["A", "B", "C", "D", "E", "F"];
 const THEME_KEY = "gk-theme";
+const SUBJECT_KEY = "gk-subject";
+
+let subjects = [];
+let currentSubject = null;
 
 let chapters = [];
 let currentChapterId = null;
@@ -241,8 +251,102 @@ function setStatus(message, type = "") {
 
 function setView(nextView) {
   document.body.dataset.view = nextView;
+  subjectView.classList.toggle("hidden", nextView !== "subject");
   quizView.classList.toggle("hidden", nextView !== "quiz");
   adminView.classList.toggle("hidden", nextView !== "admin");
+}
+
+function currentSubjectInfo() {
+  return subjects.find((subject) => subject.id === currentSubject) || null;
+}
+
+function updateSubjectLabels() {
+  const info = currentSubjectInfo();
+  const label = info ? info.name : "Subject";
+
+  if (currentSubjectLabel) {
+    currentSubjectLabel.textContent = label;
+  }
+
+  if (adminSubjectLabel) {
+    adminSubjectLabel.textContent = label;
+  }
+}
+
+function renderSubjects() {
+  if (!subjectGrid) {
+    return;
+  }
+
+  if (!subjects.length) {
+    subjectGrid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon" aria-hidden="true">📚</div>
+        <h2>Subject লোড হচ্ছে...</h2>
+      </div>
+    `;
+    return;
+  }
+
+  subjectGrid.innerHTML = subjects.map((subject) => `
+    <button class="subject-card" type="button" data-subject-id="${escapeHtml(subject.id)}">
+      <span class="subject-card-icon" aria-hidden="true">${escapeHtml(subject.icon)}</span>
+      <span class="subject-card-body">
+        <strong>${escapeHtml(subject.name)}</strong>
+        <span>${escapeHtml(subject.nameEn)}</span>
+      </span>
+      <span class="subject-card-meta">${subject.chapterCount ? `${subject.chapterCount} chapter` : "শুরু করুন"}</span>
+    </button>
+  `).join("");
+}
+
+async function selectSubject(subjectId) {
+  if (!subjectId || subjectId === currentSubject) {
+    if (subjectId) {
+      setView("quiz");
+    }
+    return;
+  }
+
+  currentSubject = subjectId;
+  localStorage.setItem(SUBJECT_KEY, subjectId);
+  currentChapterId = null;
+  storedPages = [];
+  storedQuestions = [];
+  practicePageFilter = "all";
+  questions = [];
+  selectedAnswers.clear();
+  submitted = false;
+  mode = "practice";
+  resetExamState();
+
+  updateSubjectLabels();
+  setView("quiz");
+
+  try {
+    await loadChapterSummaries();
+  } catch (error) {
+    chapters = [];
+    renderChapters();
+    renderChapterSelect();
+    renderPageSelect();
+    renderQuiz();
+  }
+}
+
+function goToSubjects() {
+  refreshSubjects();
+  setView("subject");
+}
+
+async function refreshSubjects() {
+  try {
+    const data = await requestJson("/api/subjects");
+    subjects = data.subjects || [];
+    renderSubjects();
+  } catch (_error) {
+    // Ignore subject refresh errors during quiz flow.
+  }
 }
 
 function hideLoading() {
@@ -286,10 +390,16 @@ function applyTheme(theme) {
   const nextTheme = theme === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = nextTheme;
 
-  const lightIcon = themeToggleBtn.querySelector(".theme-icon-light");
-  const darkIcon = themeToggleBtn.querySelector(".theme-icon-dark");
-  lightIcon.classList.toggle("hidden", nextTheme === "dark");
-  darkIcon.classList.toggle("hidden", nextTheme === "dark");
+  [themeToggleBtn, themeToggleBtnSubject].forEach((button) => {
+    if (!button) {
+      return;
+    }
+
+    const lightIcon = button.querySelector(".theme-icon-light");
+    const darkIcon = button.querySelector(".theme-icon-dark");
+    lightIcon.classList.toggle("hidden", nextTheme === "dark");
+    darkIcon.classList.toggle("hidden", nextTheme === "dark");
+  });
 
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) {
@@ -367,27 +477,64 @@ function syncExamPoolFromSetup() {
 
 async function bootstrap() {
   initTheme();
+  registerServiceWorker();
 
   try {
     storageInfo = await requestJson("/api/health");
     updateStorageBadge();
-    await loadChapterSummaries();
+    const subjectData = await requestJson("/api/subjects");
+    subjects = subjectData.subjects || [];
+    renderSubjects();
+
+    const savedSubject = localStorage.getItem(SUBJECT_KEY);
+    const validSavedSubject = savedSubject && subjects.some((subject) => subject.id === savedSubject);
+
+    if (validSavedSubject) {
+      currentSubject = savedSubject;
+      updateSubjectLabels();
+      setView("quiz");
+      await loadChapterSummaries();
+    } else {
+      setView("subject");
+    }
   } catch (error) {
     storageInfo = { ok: false };
     updateStorageBadge();
+    subjects = [];
     chapters = [];
+    renderSubjects();
     renderChapters();
     renderChapterSelect();
     renderPageSelect();
     renderQuiz();
+    setView("subject");
     setStatus("Server চালু নেই। npm start দিয়ে app চালান।", "error");
   } finally {
     hideLoading();
   }
 }
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
 async function loadChapterSummaries() {
-  const data = await requestJson("/api/chapters");
+  if (!currentSubject) {
+    chapters = [];
+    renderChapters();
+    renderChapterSelect();
+    renderPageSelect();
+    renderQuiz();
+    return;
+  }
+
+  const data = await requestJson(`/api/chapters?subject=${encodeURIComponent(currentSubject)}`);
   chapters = data.chapters || [];
   const currentExists = currentChapterId && chapters.some((chapter) => chapter.id === currentChapterId);
 
@@ -397,6 +544,7 @@ async function loadChapterSummaries() {
 
   if (chapters.length && !currentExists && mode === "practice") {
     await loadChapter(chapters[0].id, false);
+    await refreshSubjects();
     return;
   }
 
@@ -406,6 +554,7 @@ async function loadChapterSummaries() {
   }
 
   renderQuiz();
+  await refreshSubjects();
 }
 
 async function loadChapter(id, shouldRenderQuiz = true) {
@@ -674,6 +823,11 @@ async function saveChapter() {
     return;
   }
 
+  if (!currentSubject) {
+    setStatus("আগে subject select করুন।", "error");
+    return;
+  }
+
   try {
     let normalized = null;
     let newQuestions = [];
@@ -684,7 +838,7 @@ async function saveChapter() {
       newQuestions = questionsForDatabase(normalized);
     }
 
-    const payload = { title };
+    const payload = { title, subject: currentSubject };
 
     if (normalized) {
       const nextPages = currentChapterId && storedPages.length
@@ -730,6 +884,7 @@ async function saveChapter() {
     renderPageSelect();
     renderAdminPages();
     renderQuiz();
+    await refreshSubjects();
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
@@ -1262,7 +1417,24 @@ resetBtn.addEventListener("click", resetState);
 submitBtn.addEventListener("click", submitExam);
 openAdminBtn.addEventListener("click", () => setView("admin"));
 backToQuizBtn.addEventListener("click", () => setView("quiz"));
+backToSubjectsBtn.addEventListener("click", goToSubjects);
 themeToggleBtn.addEventListener("click", toggleTheme);
+
+if (themeToggleBtnSubject) {
+  themeToggleBtnSubject.addEventListener("click", toggleTheme);
+}
+
+if (subjectGrid) {
+  subjectGrid.addEventListener("click", (event) => {
+    const subjectButton = event.target.closest("[data-subject-id]");
+
+    if (!subjectButton) {
+      return;
+    }
+
+    selectSubject(subjectButton.dataset.subjectId);
+  });
+}
 
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => switchMode(button.dataset.mode));

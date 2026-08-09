@@ -2,7 +2,7 @@
   "name": "jobayer-gk-mcq",
   "version": "1.0.0",
   "private": true,
-  "description": "Jobayer GK book chapter-wise MCQ practice and exam app with MongoDB storage.",
+  "description": "বাংলা, English ও GK subject-wise MCQ practice and exam app with MongoDB storage.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -14,6 +14,14 @@ const projectRoot = fsSync.existsSync(path.join(__dirname, "index.html")) ? __di
 const dataDir = path.join(projectRoot, "data");
 const dataFile = path.join(dataDir, "chapters.json");
 
+const SUBJECTS = [
+  { id: "bangla", name: "বাংলা", nameEn: "Bangla", icon: "📖" },
+  { id: "english", name: "English", nameEn: "English", icon: "📝" },
+  { id: "gk", name: "GK", nameEn: "General Knowledge", icon: "🌍" },
+];
+
+const DEFAULT_SUBJECT = "gk";
+
 let db;
 let chapters;
 let mongoClient;
@@ -27,6 +35,52 @@ app.use(express.static(projectRoot));
 
 function normalizeText(value) {
   return String(value ?? "").trim();
+}
+
+function isValidSubject(subject) {
+  return SUBJECTS.some((item) => item.id === subject);
+}
+
+function normalizeSubject(value, { required = false } = {}) {
+  const subject = normalizeText(value).toLowerCase() || (required ? "" : DEFAULT_SUBJECT);
+
+  if (!subject) {
+    const error = new Error("Subject দরকার।");
+    error.status = 400;
+    throw error;
+  }
+
+  if (!isValidSubject(subject)) {
+    const error = new Error("Subject ঠিক নয়।");
+    error.status = 400;
+    throw error;
+  }
+
+  return subject;
+}
+
+function normalizeChapterSubject(chapter) {
+  const subject = normalizeText(chapter?.subject).toLowerCase();
+
+  return {
+    ...chapter,
+    subject: isValidSubject(subject) ? subject : DEFAULT_SUBJECT,
+  };
+}
+
+function subjectSummary(subjectId, chapterDocs) {
+  const subject = SUBJECTS.find((item) => item.id === subjectId);
+  const docs = chapterDocs.filter((chapter) => normalizeChapterSubject(chapter).subject === subjectId);
+  const questionCount = docs.reduce((sum, chapter) => sum + getChapterQuestions(chapter).length, 0);
+
+  return {
+    id: subject.id,
+    name: subject.name,
+    nameEn: subject.nameEn,
+    icon: subject.icon,
+    chapterCount: docs.length,
+    questionCount,
+  };
 }
 
 function normalizeQuestions(input, options = {}) {
@@ -133,12 +187,14 @@ function normalizePagesFromBody(body) {
 }
 
 function chapterSummary(chapter) {
-  const pages = ensureChapterPages(chapter);
+  const normalized = normalizeChapterSubject(chapter);
+  const pages = ensureChapterPages(normalized);
   const questionCount = pages.reduce((sum, page) => sum + page.questions.length, 0);
 
   return {
-    id: chapter._id.toString(),
-    title: chapter.title,
+    id: normalized._id.toString(),
+    title: normalized.title,
+    subject: normalized.subject,
     questionCount,
     pageCount: pages.length,
     pages: pages.map((page) => ({
@@ -147,8 +203,8 @@ function chapterSummary(chapter) {
       title: page.title,
       questionCount: page.questions.length,
     })),
-    createdAt: chapter.createdAt,
-    updatedAt: chapter.updatedAt,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
   };
 }
 
@@ -196,7 +252,30 @@ async function readFileChapters() {
   try {
     const raw = await fs.readFile(dataFile, "utf8");
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const items = Array.isArray(parsed) ? parsed : [];
+    let changed = false;
+
+    const normalized = items.map((item) => {
+      const subject = normalizeText(item.subject).toLowerCase();
+
+      if (!isValidSubject(subject)) {
+        changed = true;
+        return { ...item, subject: DEFAULT_SUBJECT };
+      }
+
+      if (subject !== item.subject) {
+        changed = true;
+        return { ...item, subject };
+      }
+
+      return item;
+    });
+
+    if (changed) {
+      await writeFileChapters(normalized);
+    }
+
+    return normalized;
   } catch (error) {
     if (error.code === "ENOENT") {
       return [];
@@ -211,13 +290,22 @@ async function writeFileChapters(items) {
   await fs.writeFile(dataFile, JSON.stringify(items, null, 2), "utf8");
 }
 
-async function listChapters() {
+async function listChapters(subjectFilter = null) {
+  let docs;
+
   if (storageMode === "mongodb") {
-    return chapters.find({}, { sort: { chapterNo: 1, createdAt: 1 } }).toArray();
+    const query = subjectFilter ? { subject: subjectFilter } : {};
+    docs = await chapters.find(query, { sort: { chapterNo: 1, createdAt: 1 } }).toArray();
+  } else {
+    docs = await readFileChapters();
+    docs = docs.sort((a, b) => (a.chapterNo || 0) - (b.chapterNo || 0));
+
+    if (subjectFilter) {
+      docs = docs.filter((chapter) => normalizeChapterSubject(chapter).subject === subjectFilter);
+    }
   }
 
-  const docs = await readFileChapters();
-  return docs.sort((a, b) => (a.chapterNo || 0) - (b.chapterNo || 0));
+  return docs.map(normalizeChapterSubject);
 }
 
 async function findChapterById(id) {
@@ -229,14 +317,16 @@ async function findChapterById(id) {
   return docs.find((doc) => doc._id === id) || null;
 }
 
-async function createChapter(title, pageItems) {
+async function createChapter(title, pageItems, subject) {
   const now = new Date().toISOString();
   const pages = pageItems || [];
+  const normalizedSubject = normalizeSubject(subject, { required: true });
 
   if (storageMode === "mongodb") {
-    const chapterCount = await chapters.countDocuments();
+    const chapterCount = await chapters.countDocuments({ subject: normalizedSubject });
     const result = await chapters.insertOne({
       title,
+      subject: normalizedSubject,
       chapterNo: chapterCount + 1,
       pages,
       createdAt: now,
@@ -247,10 +337,12 @@ async function createChapter(title, pageItems) {
   }
 
   const docs = await readFileChapters();
+  const subjectChapterCount = docs.filter((item) => normalizeChapterSubject(item).subject === normalizedSubject).length;
   const chapter = {
     _id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title,
-    chapterNo: docs.length + 1,
+    subject: normalizedSubject,
+    chapterNo: subjectChapterCount + 1,
     pages,
     createdAt: now,
     updatedAt: now,
@@ -261,12 +353,17 @@ async function createChapter(title, pageItems) {
   return chapter;
 }
 
-async function updateChapter(id, title, pageItems) {
+async function updateChapter(id, title, pageItems, subject) {
   const now = new Date().toISOString();
+  const normalizedSubject = subject ? normalizeSubject(subject, { required: true }) : null;
 
   if (storageMode === "mongodb") {
     const _id = parseObjectId(id);
     const update = { title, updatedAt: now };
+
+    if (normalizedSubject) {
+      update.subject = normalizedSubject;
+    }
 
     if (pageItems !== undefined) {
       update.pages = pageItems;
@@ -293,6 +390,10 @@ async function updateChapter(id, title, pageItems) {
     title,
     updatedAt: now,
   };
+
+  if (normalizedSubject) {
+    nextChapter.subject = normalizedSubject;
+  }
 
   if (pageItems !== undefined) {
     nextChapter.pages = pageItems;
@@ -336,10 +437,22 @@ app.get("/api/health", async (_req, res) => {
   });
 });
 
-app.get("/api/chapters", requireDatabase, async (_req, res, next) => {
+app.get("/api/subjects", requireDatabase, async (_req, res, next) => {
   try {
     const docs = await listChapters();
-    res.json({ chapters: docs.map(chapterSummary) });
+    res.json({
+      subjects: SUBJECTS.map((subject) => subjectSummary(subject.id, docs)),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/chapters", requireDatabase, async (req, res, next) => {
+  try {
+    const subject = req.query.subject ? normalizeSubject(req.query.subject, { required: true }) : null;
+    const docs = await listChapters(subject);
+    res.json({ chapters: docs.map(chapterSummary), subject: subject || null });
   } catch (error) {
     next(error);
   }
@@ -362,13 +475,14 @@ app.get("/api/chapters/:id", requireDatabase, async (req, res, next) => {
 app.post("/api/chapters", requireDatabase, async (req, res, next) => {
   try {
     const title = normalizeText(req.body.title);
+    const subject = normalizeSubject(req.body.subject, { required: true });
     const pageItems = normalizePagesFromBody(req.body) ?? [];
 
     if (!title) {
       return res.status(400).json({ error: "Chapter title দরকার।" });
     }
 
-    const chapter = await createChapter(title, pageItems);
+    const chapter = await createChapter(title, pageItems, subject);
 
     res.status(201).json({ chapter: serializeChapter(chapter) });
   } catch (error) {
@@ -385,8 +499,9 @@ app.put("/api/chapters/:id", requireDatabase, async (req, res, next) => {
     }
 
     const pageItems = normalizePagesFromBody(req.body);
+    const subject = req.body.subject ? normalizeSubject(req.body.subject, { required: true }) : null;
 
-    const result = await updateChapter(req.params.id, title, pageItems);
+    const result = await updateChapter(req.params.id, title, pageItems, subject);
 
     if (!result) {
       return res.status(404).json({ error: "Chapter পাওয়া যায়নি।" });
@@ -443,6 +558,11 @@ async function connectDatabase() {
     chapters = db.collection("chapters");
     await chapters.createIndex({ chapterNo: 1 });
     await chapters.createIndex({ title: 1 });
+    await chapters.createIndex({ subject: 1, chapterNo: 1 });
+    await chapters.updateMany(
+      { subject: { $exists: false } },
+      { $set: { subject: DEFAULT_SUBJECT } },
+    );
 
     storageMode = "mongodb";
     databaseError = null;
