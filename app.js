@@ -21,6 +21,8 @@ const answeredCount = document.querySelector("#answeredCount");
 const liveScore = document.querySelector("#liveScore");
 const totalLabel = document.querySelector("#totalLabel");
 const answeredLabel = document.querySelector("#answeredLabel");
+const scoreLabel = document.querySelector("#scoreLabel");
+const scoreStrip = document.querySelector("#scoreStrip");
 const addChapterBtn = document.querySelector("#addChapterBtn");
 const saveChapterBtn = document.querySelector("#saveChapterBtn");
 const clearDraftBtn = document.querySelector("#clearDraftBtn");
@@ -405,12 +407,25 @@ function applyTheme(theme) {
     darkIcon.classList.toggle("hidden", nextTheme === "dark");
   });
 
+  syncThemeColor();
+  localStorage.setItem(THEME_KEY, nextTheme);
+}
+
+function syncThemeColor() {
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  if (metaTheme) {
-    metaTheme.content = nextTheme === "dark" ? "#0f1419" : "#116b5f";
+  if (!metaTheme) {
+    return;
   }
 
-  localStorage.setItem(THEME_KEY, nextTheme);
+  const isDark = document.documentElement.dataset.theme === "dark";
+  const isExam = document.body.dataset.mode === "exam";
+
+  if (isDark) {
+    metaTheme.content = isExam ? "#121820" : "#0b1015";
+    return;
+  }
+
+  metaTheme.content = isExam ? "#2357a5" : "#116b5f";
 }
 
 function initTheme() {
@@ -1010,7 +1025,7 @@ function openExamResultModal(score) {
   }
 
   const tier = examResultTier(score);
-  const percent = score.total ? Math.round((score.correct / score.total) * 100) : 0;
+  const percent = scorePercent(score);
 
   examResultContent.innerHTML = `
     <div class="exam-result-hero ${tier.id}">
@@ -1018,25 +1033,30 @@ function openExamResultModal(score) {
       <p class="eyebrow">Exam Result</p>
       <h2 id="examResultTitle">${escapeHtml(tier.label)}</h2>
       <p class="exam-result-note">${escapeHtml(tier.note)}</p>
-      <div class="exam-result-score-ring">
-        <strong>${score.score}</strong>
-        <span>Score</span>
+      ${renderScoreRing(percent)}
+      <div class="exam-result-score-pill">
+        <span>Final Score</span>
+        <strong>${formatScore(score.score)}</strong>
       </div>
-      <div class="exam-result-percent">${percent}% সঠিক</div>
     </div>
     <div class="exam-result-grid">
-      ${metric("মোট", score.total)}
-      ${metric("সঠিক", score.correct)}
-      ${metric("ভুল", score.wrong)}
-      ${metric("Skipped", score.skipped)}
+      ${resultMetric("মোট প্রশ্ন", score.total)}
+      ${resultMetric("সঠিক", score.correct, "tone-success")}
+      ${resultMetric("ভুল", score.wrong, "tone-danger")}
+      ${resultMetric("Skipped", score.skipped, "tone-muted")}
     </div>
-    ${score.negativeApplied ? `<p class="exam-result-footnote">Negative marking (-0.25) প্রয়োগ করা হয়েছে।</p>` : ""}
-    <p class="exam-result-hint">✕ চাপলে প্রশ্নের সঠিক/ভুল উত্তর দেখতে পারবেন।</p>
+    ${score.negativeApplied ? `<p class="exam-result-footnote">Negative marking প্রয়োগ: প্রতি ভুল উত্তরে -0.25</p>` : ""}
+    <button id="reviewAnswersBtn" class="primary-btn exam-result-action" type="button">উত্তর Review করুন</button>
+    <p class="exam-result-hint">✕ চাপলেও review mode-এ যেতে পারবেন</p>
   `;
 
   examResultModal.classList.remove("hidden");
   document.body.classList.add("modal-open");
   closeExamResultBtn?.focus();
+
+  examResultContent.querySelector("#reviewAnswersBtn")?.addEventListener("click", () => {
+    closeExamResultModal(true);
+  });
 }
 
 function closeExamResultModal(shouldRender = true) {
@@ -1058,6 +1078,11 @@ function closeExamResultModal(shouldRender = true) {
 }
 
 function resetState() {
+  if (submitted && examResultDismissed && mode === "exam") {
+    beginExamSetup();
+    return;
+  }
+
   selectedAnswers.clear();
   submitted = false;
   examResultDismissed = false;
@@ -1122,23 +1147,46 @@ function renderQuiz() {
   const isExamSetup = isExam && examPhase === "setup";
   const isExamRunning = isExam && examPhase === "running";
   const hasData = isExamSetup ? Boolean(examSetup.availableCount) : questions.length > 0;
-  const score = hasData && !isExamSetup ? calculateScore() : { total: 0, answered: 0, score: 0 };
+  const score = hasData && !isExamSetup ? calculateScore() : {
+    total: 0, answered: 0, score: 0, correct: 0, wrong: 0, skipped: 0,
+  };
 
   document.body.dataset.mode = mode;
+  document.body.classList.toggle("exam-submitted", isExamRunning && submitted);
+  document.body.classList.toggle("exam-review", isExamRunning && submitted && examResultDismissed);
+  syncThemeColor();
   controlRow.classList.toggle("hidden", isExam);
+
   totalCount.textContent = isExamSetup ? (examSetup.availableCount || 0) : score.total;
   answeredCount.textContent = isExamSetup ? examSetup.questionCount : score.answered;
-  liveScore.textContent = hasData && !isExamSetup ? (isExamRunning && !submitted ? "-" : score.score) : 0;
+
+  if (isExamRunning && !submitted) {
+    liveScore.textContent = "-";
+    scoreLabel.textContent = "স্কোর";
+  } else if (isExamRunning && submitted && !examResultDismissed) {
+    liveScore.textContent = formatScore(score.score);
+    scoreLabel.textContent = "Final Score";
+  } else if (isExamRunning && submitted && examResultDismissed) {
+    liveScore.textContent = formatScore(score.score);
+    scoreLabel.textContent = `${scorePercent(score)}%`;
+  } else {
+    liveScore.textContent = hasData ? formatScore(score.score) : "0";
+    scoreLabel.textContent = "স্কোর";
+  }
+
   totalLabel.textContent = isExamSetup ? "মোট MCQ" : "মোট";
   answeredLabel.textContent = isExamSetup ? "নির্বাচিত" : "উত্তর";
+
+  scoreStrip?.classList.toggle("score-strip-final", isExamRunning && submitted);
 
   submitBtn.disabled = !isExamRunning || !questions.length || submitted;
   submitBtn.textContent = submitted ? "Submitted" : "Submit Exam";
   resetBtn.disabled = !isExamRunning || !questions.length;
+  resetBtn.textContent = submitted && examResultDismissed ? "নতুন Exam" : "Reset";
   quizFooter.classList.toggle("hidden", !isExamRunning || !questions.length);
 
   modeButtons.forEach((button) => {
-    button.disabled = false;
+    button.disabled = isExamRunning && submitted;
     button.classList.toggle("active", button.dataset.mode === mode);
   });
 
@@ -1167,33 +1215,86 @@ function renderChapters() {
 }
 
 function renderResult(score) {
-  const showResult = score && questions.length && mode === "practice";
+  const showPracticeResult = score && questions.length && mode === "practice";
+  const showExamReview = score && questions.length && mode === "exam" && submitted && examResultDismissed;
 
-  resultPanel.classList.toggle("hidden", !showResult);
+  resultPanel.classList.toggle("hidden", !(showPracticeResult || showExamReview));
 
-  if (!showResult) {
+  if (!showPracticeResult && !showExamReview) {
     resultPanel.innerHTML = "";
     return;
   }
 
-  const headline = mode === "exam" ? "Exam Result" : "Practice Result";
+  if (showExamReview) {
+    resultPanel.innerHTML = `
+      <div class="result-summary-head">
+        <div>
+          <strong>Exam Review Mode</strong>
+          <p>সবুজ = সঠিক, লাল = ভুল, ধূসর = উত্তর দেননি</p>
+        </div>
+        <div class="result-summary-score">
+          <strong>${formatScore(score.score)}</strong>
+          <span>${scorePercent(score)}% · ${score.correct}/${score.total} সঠিক</span>
+        </div>
+      </div>
+      <div class="result-grid">
+        ${resultMetric("Score", formatScore(score.score))}
+        ${resultMetric("Correct", score.correct, "tone-success")}
+        ${resultMetric("Wrong", score.wrong, "tone-danger")}
+        ${resultMetric("Skipped", score.skipped, "tone-muted")}
+      </div>
+    `;
+    return;
+  }
 
   resultPanel.innerHTML = `
-    <strong>${headline}</strong>
+    <strong>Practice Result</strong>
     <div class="result-grid">
-      ${metric("Score", score.score)}
-      ${metric("Correct", score.correct)}
-      ${metric("Wrong", score.wrong)}
-      ${metric("Skipped", score.skipped)}
+      ${resultMetric("Score", formatScore(score.score))}
+      ${resultMetric("Correct", score.correct, "tone-success")}
+      ${resultMetric("Wrong", score.wrong, "tone-danger")}
+      ${resultMetric("Skipped", score.skipped, "tone-muted")}
     </div>
   `;
 }
 
-function metric(label, value) {
+function formatScore(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+
+  return Number.isInteger(number) ? String(number) : number.toFixed(2);
+}
+
+function scorePercent(score) {
+  if (!score?.total) {
+    return 0;
+  }
+
+  return Math.round((score.correct / score.total) * 100);
+}
+
+function renderScoreRing(percent) {
+  const safePercent = Math.max(0, Math.min(100, percent));
+  const degrees = safePercent * 3.6;
+
   return `
-    <div class="result-metric">
-      <strong>${value}</strong>
-      <span>${label}</span>
+    <div class="exam-result-ring" style="--ring-deg: ${degrees}deg;" aria-hidden="true">
+      <div class="exam-result-ring-inner">
+        <strong>${safePercent}%</strong>
+        <span>Accuracy</span>
+      </div>
+    </div>
+  `;
+}
+
+function resultMetric(label, value, tone = "") {
+  return `
+    <div class="result-metric ${tone}">
+      <strong>${escapeHtml(String(value))}</strong>
+      <span>${escapeHtml(label)}</span>
     </div>
   `;
 }
@@ -1384,12 +1485,19 @@ function renderQuestion(question, index) {
   const canReveal = mode === "practice" ? Boolean(selected) : (submitted && examResultDismissed);
   const isCorrect = selected === question.answer;
   const feedback = canReveal ? renderFeedback(question, selected, isCorrect) : "";
+  const cardTone = canReveal
+    ? (selected ? (isCorrect ? "question-card--correct" : "question-card--wrong") : "question-card--skipped")
+    : "";
+  const statusBadge = canReveal
+    ? `<span class="question-status ${selected ? (isCorrect ? "is-correct" : "is-wrong") : "is-skipped"}">${selected ? (isCorrect ? "সঠিক" : "ভুল") : "Skipped"}</span>`
+    : "";
 
   return `
-    <article class="question-card">
+    <article class="question-card ${cardTone}">
       <div class="question-head">
         <div class="question-number">${index + 1}</div>
         <p class="question-text">${escapeHtml(question.question)}</p>
+        ${statusBadge}
       </div>
       <div class="options">
         ${question.options.map((option, optionIndex) => renderOption(question, option, optionIndex, selected, canReveal)).join("")}

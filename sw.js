@@ -1,4 +1,4 @@
-const CACHE_NAME = "jobayer-mcq-v2";
+const CACHE_NAME = "jobayer-mcq-v3";
 const ASSETS = [
   "/",
   "/index.html",
