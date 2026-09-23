@@ -4,6 +4,9 @@
   "private": true,
   "description": "বাংলা, English ও GK subject-wise MCQ practice and exam app with MongoDB storage.",
   "main": "server.js",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
